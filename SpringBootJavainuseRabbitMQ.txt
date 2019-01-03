@@ -1,0 +1,388 @@
+SpringBootJavainuseRabbitMQ
+
+RabbitMQ is open source message broker software (sometimes called message-oriented middleware) that implements the Advanced Message Queuing Protocol (AMQP). The RabbitMQ server is written in the Erlang programming language and is built on the Open Telecom Platform framework for clustering and failover.
+It does not depend on JMS protocol, instead it depends on AMQP protocol
+
+Exchange are message routing agents, it is responsible for routing of the messages to diferrent queues. An exchange excepts messages from the producer application and routes them to the message queues using routing keys. We will publish the message to the exchange and based on the routing key it will send to the key that we want.
+
+SBA sends the message to exchange and then based on the routing key, the message will be send to queue
+Sender class sends the message to exchange using convertAndSend
+
+Video
+
+In pom.xml add
+<dependency>
+	<groupId>org.springframework.boot</groupId>
+	<artifactId>spring-boot-starter-amqp</artifactId> // for RabbitMQ, It does not depend on JMS protocol, instead it depends on AMQP protocol
+</dependency>
+<dependency>
+	<groupId>org.json</groupId>
+	<artifactId>json</artifactId> // for marshaling the message to json before sending it to the queue
+</dependency>
+
+Create Employee
+@JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "@id", scope = Employee.class)
+ObjectIdGenerators.IntSequenceGenerator.class is needed for marshalling the object to json
+public class Employee {
+	private String empName;
+	private String empId;
+	
+Create RabbitMQConfig
+@Configuration
+public class RabbitMQConfig {
+	@Value("${javainuse.rabbitmq.queue}")
+	String queueName;
+	@Value("${javainuse.rabbitmq.exchange}")
+	String exchange;
+	@Value("${javainuse.rabbitmq.routingkey}")
+	private String routingkey;
+	
+	//SBA sends the message to exchange and then based on the routing key, the message will be send to queue
+	
+	@Bean
+	Queue queue() {
+		return new Queue(queueName, false);
+	}
+	@Bean
+	DirectExchange exchange() {
+		return new DirectExchange(exchange);
+	}
+	@Bean
+	Binding binding(Queue queue, DirectExchange exchange) {
+		return BindingBuilder.bind(queue).to(exchange).with(routingkey);
+	}
+	@Bean
+	public MessageConverter jsonMessageConverter() {
+		return new Jackson2JsonMessageConverter();
+	}
+	@Bean
+	public AmqpTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+		final RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
+		rabbitTemplate.setMessageConverter(jsonMessageConverter());
+		return rabbitTemplate;
+	}
+}
+
+Create RabbitMQWebController
+@RestController
+@RequestMapping(value = "/javainuse-rabbitmq/")
+public class RabbitMQWebController {
+	@Autowired
+	RabbitMQSender rabbitMQSender;
+	@GetMapping(value = "/producer")
+	public String producer(@RequestParam("empName") String empName,@RequestParam("empId") String empId) {
+	Employee emp=new Employee();
+	emp.setEmpId(empId);
+	emp.setEmpName(empName);
+		rabbitMQSender.send(emp);
+		return "Message sent to the RabbitMQ JavaInUse Successfully";
+	}
+}
+
+Define the RabbitMQSender class which sends the message to the RabbitMQ using AmqpTemplate. We use the exchange and the exchange key.
+Exchanges are message routing agents, defined per virtual host within RabbitMQ. An exchange is responsible for the routing of the messages to the different queues. An exchange accepts messages from the producer application and routes them to message queues with help of header attributes, bindings, and routing keys.
+Create RabbitMQSender
+@Autowired
+	private AmqpTemplate rabbitTemplate;
+	
+	@Value("${javainuse.rabbitmq.exchange}")
+	private String exchange;
+	
+	@Value("${javainuse.rabbitmq.routingkey}")
+	private String routingkey;	
+	
+	public void send(Employee company) {
+	//sender class sends the message to exchange using convertAndSend
+		rabbitTemplate.convertAndSend(exchange, routingkey, company);
+		System.out.println("Send msg = " + company);
+	    
+	}
+	
+In application.properties
+spring.rabbitmq.host=localhost
+spring.rabbitmq.port=5672
+spring.rabbitmq.username=guest
+spring.rabbitmq.password=guest
+javainuse.rabbitmq.exchange=javainuse.exchange
+javainuse.rabbitmq.queue=javainuse.queue
+javainuse.rabbitmq.routingkey=javainuse.routingkey
+
+Create main class
+
+Start RabbitMQ following https://www.javainuse.com/misc/rabbitmq-hello-world
+Start the Spring Boot Application by running it as a Java Application
+Hit the url as follows- http://localhost:8080/javainuse-rabbitmq/producer?empName=emp1&empId=emp001
+
+This will trigger the message to be sent to the javainuse queue
+Next go to the RabbitMQ console-http://localhost:15672/
+We can see in the Queues section, a queue name java gets created and it has one message
+
+
+
+
+
+
+
+
+
+Spring Boot + RabbitMQ Hello World Example
+In this post we will integrate Spring Boot and RabbitMQ instance.
+In a previous post we had seen how to get RabbitMQ up and running. 
+Spring Boot RabbitMQ Tutorial 
+
+Video
+
+This tutorial is explained in the below Youtube Video.
+
+
+Lets Begin-
+
+The project will be as follows- 
+Spring Boot RabbitMQ Eclipse Setup 
+Define the pom.xml as follows- Add the spring-boot-starter-amqp dependency.
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>com.javainuse</groupId>
+	<artifactId>SpringBootRabbitMQHelloWorld</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+
+	<packaging>jar</packaging>
+
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>1.5.3.RELEASE</version>
+		<relativePath />
+	</parent>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<java.version>1.8</java.version>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.json</groupId>
+			<artifactId>json</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>
+
+ 
+Define the domain class Employee as follows-
+package com.javainuse.model;
+
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+
+@JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "@id", scope = Employee.class)
+public class Employee {
+
+	private String empName;
+	private String empId;
+
+	public String getEmpName() {
+		return empName;
+	}
+
+	public void setEmpName(String empName) {
+		this.empName = empName;
+	}
+
+	public String getEmpId() {
+		return empId;
+	}
+
+	public void setEmpId(String empId) {
+		this.empId = empId;
+	}
+
+	@Override
+	public String toString() {
+		return "Employee [empName=" + empName + ", empId=" + empId + "]";
+	}
+
+}
+Next define the configuration as follows-
+package com.javainuse.config;
+
+import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class RabbitMQConfig {
+
+	@Value("")
+	String queueName;
+
+	@Value("")
+	String exchange;
+
+	@Value("")
+	private String routingkey;
+
+	@Bean
+	Queue queue() {
+		return new Queue(queueName, false);
+	}
+
+	@Bean
+	DirectExchange exchange() {
+		return new DirectExchange(exchange);
+	}
+
+	@Bean
+	Binding binding(Queue queue, DirectExchange exchange) {
+		return BindingBuilder.bind(queue).to(exchange).with(routingkey);
+	}
+
+	@Bean
+	public MessageConverter jsonMessageConverter() {
+		return new Jackson2JsonMessageConverter();
+	}
+
+	
+	@Bean
+	public AmqpTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+		final RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
+		rabbitTemplate.setMessageConverter(jsonMessageConverter());
+		return rabbitTemplate;
+	}
+}
+
+ 
+Define the Controller to expose a GET Request API as follows-
+package com.javainuse.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.javainuse.model.Employee;
+import com.javainuse.service.RabbitMQSender;
+
+@RestController
+@RequestMapping(value = "/javainuse-rabbitmq/")
+public class RabbitMQWebController {
+
+	@Autowired
+	RabbitMQSender rabbitMQSender;
+
+	@GetMapping(value = "/producer")
+	public String producer(@RequestParam("empName") String empName,@RequestParam("empId") String empId) {
+	
+	Employee emp=new Employee();
+	emp.setEmpId(empId);
+	emp.setEmpName(empName);
+		rabbitMQSender.send(emp);
+
+		return "Message sent to the RabbitMQ JavaInUse Successfully";
+	}
+
+}
+
+Define the RabbitMQSender class which sends the message to the RabbitMQ using AmqpTemplate. We use the exchange and the exchange key.
+Exchanges are message routing agents, defined per virtual host within RabbitMQ. An exchange is responsible for the routing of the messages to the different queues. An exchange accepts messages from the producer application and routes them to message queues with help of header attributes, bindings, and routing keys.
+We will use a direct exchange instead. The routing algorithm behind a direct exchange is simple - a message goes to the queues whose binding key exactly matches the routing key of the message.
+package com.javainuse.service;
+
+import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import com.javainuse.model.Employee;
+
+@Service
+public class RabbitMQSender {
+	
+	@Autowired
+	private AmqpTemplate rabbitTemplate;
+	
+	@Value("")
+	private String exchange;
+	
+	@Value("")
+	private String routingkey;	
+	
+	public void send(Employee company) {
+		rabbitTemplate.convertAndSend(exchange, routingkey, company);
+		System.out.println("Send msg = " + company);
+	    
+	}
+}
+
+ 
+Next define th following properties in application.properties-
+spring.rabbitmq.host=localhost
+spring.rabbitmq.port=5672
+spring.rabbitmq.username=guest
+spring.rabbitmq.password=guest
+javainuse.rabbitmq.exchange=javainuse.exchange
+javainuse.rabbitmq.queue=javainuse.queue
+javainuse.rabbitmq.routingkey=javainuse.routingkey
+Finally Define the Spring Boot Class with @SpringBootApplication annotation
+package com.javainuse;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class SpringBootHelloWorldApplication {
+
+	public static void main(String[] args) {
+
+		SpringApplication.run(
+				new Object[] { SpringBootHelloWorldApplication.class }, args);
+	}
+}
+
+We are done with the required Java code. Now lets start RabbitMQ. As we had explained in detail in the Getting started with RabbitMQ perform the steps to start the RabbitMQ.
+Next start the Spring Boot Application by running it as a Java Application. Hit the url as follows- http://localhost:8080/javainuse-rabbitmq/producer?empName=emp1&empId=emp001 
+Spring Boot RabbitMQ Example 
+
+ 
+This will trigger the message to be sent to the javainuse queue.
+Next go to the RabbitMQ console-http://localhost:15672/ 
+Spring Boot RabbitMQ Consoler
+
+ 
+We can see in the Queues section, a queue name java gets created and it has one message.	
+Spring Boot RabbitMQ Queue 
+Download Source Code
+Download it -
+Spring Boot + RabbitMQ Hello World Example
+
